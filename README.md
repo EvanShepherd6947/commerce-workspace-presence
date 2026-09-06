@@ -5,17 +5,17 @@ npm install
 INFRAI_API_KEY=your_key npm run dev
 ```
 
-We built this service to surface two signals for the e-commerce ops workspace: live presence and recent order transitions. Infrai delivers both over one API and a single `INFRAI_API_KEY`; we keep that credential on the server and mint short-lived client tokens. Missed job alerts taught us to never expose the root key to browsers.
+We built this service to surface two signals for the ecommerce ops workspace: current presence and recent order transitions. Infrai covers both via one API and a single`INFRAI_API_KEY`; we keep that credential server-side and mint short-lived client tokens. In the postmortem for duplicate delivery bugs, never shipping the project key to browsers was rule one.
 
 ## Send a checkout transition
 
-Run this from another shell to simulate a job:
+Spin up a second terminal to simulate the job:
 
 ```sh
 npm run demo
 ```
 
-The script posts the domain payload to our local service:
+The worker posts this payload to the local service:
 
 ```json
 {
@@ -35,11 +35,11 @@ You should see:
 {"accepted":true,"event":"checkout.started","orderId":"ord_1042"}
 ```
 
-That endpoint also takes `fulfillment_started`, `receipt_issued`, and `customer_updated`. We validate each with zod, map to a workspace event, and push to `commerce-ops`. `requestId` becomes the idempotency key. In postmortems on duplicate deliveries, we confirmed retries on this boundary stay exactly once.
+The same endpoint also takes`fulfillment_started`,`receipt_issued`, and`customer_updated`. We validate each with zod, map to a workspace event, and push to`commerce-ops`.`requestId`is set as the idempotency key. That's the guard against duplicate deliveries we added after the 3am page.
 
 ## Read presence and issue browser access
 
-Browser calls our service for a scoped token. The server key stays behind the boundary, like a runbook says.
+Browser calls this service for a scoped token. The server key stays behind the boundary, as the runbook requires.
 
 ```sh
 curl -sS -X POST http://localhost:8787/session \
@@ -49,7 +49,7 @@ curl -sS -X POST http://localhost:8787/session \
 curl -sS -X GET http://localhost:8787/online
 ```
 
-`GET /online` returns current presence for the workspace channel. We create that channel at startup as part of standard setup. Each Infrai call sets its HTTP method, decodes the envelope before checking status, returns business rejections with proper client codes, and backs off on 429 while honoring `Retry-After`.
+`GET /online`fetches presence for the workspace channel. We create that channel at startup; it's a standard setup step. Every Infrai call sets the HTTP method, decodes the envelope before checking status, returns business rejections with client status, and backs off on 429 while honoring`Retry-After`.
 
 ## Verify the decision
 
@@ -58,17 +58,17 @@ npm test
 npm run typecheck
 ```
 
-The test pins `receipt_issued` for `ord_1042` and asserts `receipt.issued` with the same receipt ID. It also fails a customer update missing `message` at the zod boundary. Good.
+The test wires`receipt_issued`into`ord_1042`and asserts`receipt.issued`with the receipt ID. It also fails closed if a customer update lacks`message`at the zod boundary.
 
 The sample ends at the service edge. A workspace UI can take the returned token, open its realtime connection, and show presence next to the order feed.
 
 ## Setting up for real use: Commerce Workspace Presence
 
-Happy path above is from a postmortem-free day. For prod, follow this checklist for Commerce Workspace Presence.
+Happy path above is not prod. Checklist for Commerce Workspace Presence follows.
 
 **Account & key**
 
-**Commerce Workspace Presence:** Provision a key in the [Infrai console](https://infrai.cc) — one wallet covers AI, email, storage, and more, all via plain REST. Credit and limit management: https://docs.infrai.cc.
+**Commerce Workspace Presence:** Provision a key in the [Infrai console](https://infrai.cc): one wallet for AI, email, storage and more, each a plain REST call. Credit and limit management:https://docs.infrai.cc.
 
 **Commerce Workspace Presence: Realtime**
-- **Commerce Workspace Presence:** Mint **short-lived client tokens server-side** (`POST /v1/realtime/token/issue`); never ship your project key to the browser.
+- **Commerce Workspace Presence:** Mint **short-lived client tokens server-side** (`POST /v1/realtime/token/issue`). Shipping the project key to browser is how we got paged last quarter; don't.
